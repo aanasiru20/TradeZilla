@@ -19,7 +19,6 @@ export default function SettingsPage() {
   const [emailNotifications, setEmailNotifications] = useState(true)
   
   // Password
-  const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   
@@ -109,7 +108,6 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setSuccess('Password updated successfully!')
-      setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
       setTimeout(() => setSuccess(''), 3000)

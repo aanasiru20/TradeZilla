@@ -29,7 +29,6 @@ export default function TradeModal({
     handleSubmit,
     formState: { errors },
     reset,
-    setValue,
   } = useForm<TradeFormData>({
     resolver: zodResolver(TradeFormSchema),
     defaultValues: trade

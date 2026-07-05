@@ -70,8 +70,6 @@ export default function TradeFilters({ trades, onFilterChange }: FilterProps) {
     applyFilters()
   }, [searchSymbol, startDate, endDate, minPnL, maxPnL, winOnly, lossOnly, trades])
 
-  const symbols = Array.from(new Set(trades.map((t) => t.symbol))).sort()
-
   return (
     <div className="bg-slate-900 rounded-lg p-6 mb-6">
       <h3 className="text-lg font-semibold text-white mb-4">Filters</h3>
