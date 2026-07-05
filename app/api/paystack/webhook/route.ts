@@ -2,6 +2,86 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+type PaystackCustomField = {
+  variable_name?: string;
+  value?: string;
+};
+
+type PaystackEvent = {
+  event?: string;
+  data?: {
+    customer?: {
+      email?: string;
+      customer_code?: string;
+    };
+    metadata?: {
+      custom_fields?: PaystackCustomField[];
+    };
+  };
+};
+
+async function resolveProfile(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId?: string | null,
+  customerCode?: string | null
+) {
+  if (userId) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, user_id, paystack_customer_code, plan_type, subscription_status')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (data) {
+      return data;
+    }
+  }
+
+  if (customerCode) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, user_id, paystack_customer_code, plan_type, subscription_status')
+      .eq('paystack_customer_code', customerCode)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (data) {
+      return data;
+    }
+  }
+
+  return null;
+}
+
+async function updateSubscriptionStatus(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  payload: {
+    subscription_status: string;
+    plan_type?: string;
+    paystack_customer_code?: string | null;
+  }
+) {
+  const { error } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.text();
@@ -20,7 +100,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
-    const event = JSON.parse(body);
+    const event = JSON.parse(body) as PaystackEvent;
 
     // Initialize Supabase Admin Client
     const supabaseAdmin = createClient(
@@ -28,38 +108,52 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Handle charge.success event
+    const customerCode = event.data?.customer?.customer_code ?? null;
+    const email = event.data?.customer?.email ?? 'unknown';
+    const customFields = event.data?.metadata?.custom_fields ?? [];
+    const userId = customFields.find((field) => field.variable_name === 'user_id')?.value ?? null;
+
+    const profile = await resolveProfile(supabaseAdmin, userId, customerCode);
+
+    console.log(`Paystack webhook received: ${event.event} for ${email}`, {
+      userId,
+      customerCode,
+      matchedUserId: profile?.user_id ?? null,
+    });
+
+    if (!profile && (event.event === 'charge.success' || event.event === 'charge.failed' || event.event === 'subscription.disable' || event.event === 'subscription.not_renew')) {
+      console.warn('No matching profile found for webhook event.');
+      return NextResponse.json({ status: 'ignored', reason: 'profile not found' }, { status: 200 });
+    }
+
     if (event.event === 'charge.success') {
-      // Best practice: Extract the user ID from the metadata passed during checkout
-      const userId = event.data.metadata?.custom_fields?.find(
-        (f: any) => f.variable_name === 'user_id'
-      )?.value;
-      
-      const email = event.data.customer.email;
-      const customerCode = event.data.customer.customer_code;
+      await updateSubscriptionStatus(supabaseAdmin, profile!.user_id, {
+        subscription_status: 'active',
+        plan_type: 'pro',
+        paystack_customer_code: customerCode ?? profile?.paystack_customer_code ?? null,
+      });
 
-      console.log('Payment successful for:', email, userId ? `(User: ${userId})` : '');
+      console.log('Successfully marked subscription active for user:', profile!.user_id);
+    }
 
-      if (userId) {
-         // Update the user's profile to active status
-         const { error } = await supabaseAdmin
-           .from('profiles') // Adjust if your table is named differently
-           .update({
-             subscription_status: 'active',
-             plan_type: 'pro',
-             paystack_customer_code: customerCode
-           })
-           .eq('id', userId);
+    if (event.event === 'charge.failed') {
+      await updateSubscriptionStatus(supabaseAdmin, profile!.user_id, {
+        subscription_status: 'past_due',
+        plan_type: profile?.plan_type ?? 'pro',
+        paystack_customer_code: customerCode ?? profile?.paystack_customer_code ?? null,
+      });
 
-         if (error) {
-           console.error('Supabase update error:', error);
-           return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
-         }
-         
-         console.log('Successfully updated profile for user:', userId);
-      } else {
-         console.warn('Payment succeeded, but no user_id found in metadata.');
-      }
+      console.log('Marked subscription past due for user:', profile!.user_id);
+    }
+
+    if (event.event === 'subscription.disable' || event.event === 'subscription.not_renew') {
+      await updateSubscriptionStatus(supabaseAdmin, profile!.user_id, {
+        subscription_status: 'inactive',
+        plan_type: profile?.plan_type ?? 'pro',
+        paystack_customer_code: customerCode ?? profile?.paystack_customer_code ?? null,
+      });
+
+      console.log('Marked subscription inactive for user:', profile!.user_id);
     }
 
     return NextResponse.json({ status: 'success' }, { status: 200 });
