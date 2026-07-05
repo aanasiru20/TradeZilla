@@ -2,6 +2,14 @@
 
 A modern SaaS trading journal platform built with Next.js, designed for multiple users to track and analyze their trades.
 
+## License
+
+This repository is proprietary. Commercial or non-commercial use requires a separate paid license or explicit written agreement. See [LICENSE](LICENSE) for details.
+
+Contact:
+- Email: nasiruabuabdul@gmail.com
+- LinkedIn: https://www.linkedin.com/in/abu-nasirudeen-12a522383
+
 ## Getting Started
 
 ### Prerequisites
