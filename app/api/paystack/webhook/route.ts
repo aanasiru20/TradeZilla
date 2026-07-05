@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 type PaystackCustomField = {
@@ -20,11 +20,19 @@ type PaystackEvent = {
   };
 };
 
+type Profile = {
+  id: string;
+  user_id: string;
+  paystack_customer_code: string | null;
+  plan_type: string;
+  subscription_status: string;
+};
+
 async function resolveProfile(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseClient,
   userId?: string | null,
   customerCode?: string | null
-) {
+): Promise<Profile | null> {
   if (userId) {
     const { data, error } = await supabaseAdmin
       .from('profiles')
@@ -37,7 +45,7 @@ async function resolveProfile(
     }
 
     if (data) {
-      return data;
+      return data as Profile;
     }
   }
 
@@ -53,7 +61,7 @@ async function resolveProfile(
     }
 
     if (data) {
-      return data;
+      return data as Profile;
     }
   }
 
@@ -61,14 +69,14 @@ async function resolveProfile(
 }
 
 async function updateSubscriptionStatus(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   payload: {
     subscription_status: string;
     plan_type?: string;
     paystack_customer_code?: string | null;
   }
-) {
+): Promise<void> {
   const { error } = await supabaseAdmin
     .from('profiles')
     .update({
