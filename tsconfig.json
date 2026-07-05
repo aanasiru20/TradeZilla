@@ -44,6 +44,7 @@
   ],
   "exclude": [
     "node_modules",
+    "supabase/functions",
     "EXAMPLE_DASHBOARD.tsx",
     "EXAMPLE_LOGIN.tsx"
   ]
